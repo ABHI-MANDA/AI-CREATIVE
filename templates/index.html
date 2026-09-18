@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{app_name}} • Production Campaign Agent</title><link rel="stylesheet" href="{{url_for('static',filename='style.css')}}"></head><body>
+<header><div><b>◆ {{app_name}}</b><span> Reference-Aware Agent • Web Ingestion • Multi-Modal Campaign Studio</span></div><div id="health" class="health-badge"><span class="dot"></span> Connecting…</div></header>
+<main><section class="hero"><div><small>ENTERPRISE AGENTIC WORKFLOW</small><h1>Extract Data → Understand Identity → Generate Multi-Modal Campaign</h1><p>Autonomous agent that extracts live brand intelligence from websites, ingests visual assets, synthesizes targeted multi-channel copy, and generates high-fidelity images and dynamic motion videos.</p></div><button id="newBtn" class="ghost">New campaign</button></section>
+<div class="layout"><aside><div class="card"><h3>Pipeline Status</h3><div id="steps"></div></div><div class="card"><h3>Creative Memory</h3><div id="memory">Loading…</div></div></aside><section>
+<div class="card" id="inputCard"><h2>1. Creative Brief & Web Reference</h2>
+<label>Website URL <span>(Extracts logos, brand colors, copy, and visual context)</span></label><input id="url" placeholder="https://example.com (e.g. https://justflip.in/)">
+<label>Upload Reference Images/Videos <span>(Optional additional assets)</span></label><input id="files" type="file" multiple accept="image/*,video/mp4,video/webm,video/quicktime"><div id="uploadStatus" class="muted"></div>
+<label>Campaign Objectives & Requirements <span>(What should the agent produce?)</span></label><textarea id="brief" rows="4" placeholder="Example: Create a high-converting luxury campaign with cinematic visual aesthetic and engaging social media ad copy."></textarea>
+<label>Output Creative Types</label>
+<div class="checks"><label><input type="checkbox" value="copy" checked> Copy (Multi-Channel)</label><label><input type="checkbox" value="image" checked> Image (High-Res)</label><label><input type="checkbox" value="video" checked> Video (Cinematic MP4)</label></div>
+<div class="action-buttons">
+<button class="primary highlight-btn" id="autoLaunchBtn">🚀 Launch Full Campaign (1-Click)</button>
+<button class="secondary" id="create">Step-by-Step Mode (Review Prompts First)</button>
+</div>
+<div id="status" class="status"></div></div>
+
+<div class="card hidden" id="referenceCard"><h2>2. Extracted Reference Intelligence</h2><div id="reference"></div><button class="primary" id="promptBtn">Build Prompts from References</button></div>
+<div class="card hidden" id="promptCard"><h2>3. Production Prompt Studio</h2><p class="muted">The prompts below incorporate extracted website intelligence, visual tokens, and past review memory.</p><div id="prompts"></div><div class="action-buttons"><button class="primary" id="reviewBtn">Save & Refine with AI</button><button class="primary highlight-btn" id="verifyBtn">⚡ Generate Campaign Now</button></div></div>
+<div class="card hidden" id="verifyCard"><div id="genStatus" class="status"></div></div>
+<div class="card hidden" id="modelCard"><h2>4. Models & Creative Engines</h2><div id="models"></div></div>
+<div class="card hidden" id="outputCard"><h2>5. Production Campaign Deliverables</h2><p class="muted">Review, preview, and download your multi-channel marketing deliverables.</p><div id="outputs"></div><button class="primary" id="finalBtn">Submit Feedback & Update Agent Memory</button></div>
+</section></div></main><script src="{{url_for('static',filename='script.js')}}"></script></body></html>
