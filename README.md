@@ -1,28 +1,26 @@
-# AI Creative Studio — Reference-Aware Agent v3
+# AI Creative Studio -- Reference-Aware Agent v3
 
 A local Flask application for reference-driven image, video and copy generation with persistent human-review memory.
 
-## What is fixed
+## Features
 
 1. **Real reference extraction**
-   - Downloads HTML images and OpenGraph/Twitter images.
-   - Finds HTML video/source links and common video files.
+   - Downloads HTML images, OpenGraph/Twitter images, video/source links.
    - Accepts direct local image/video uploads from the UI.
    - Downloads references into `data/reference_assets/<project_id>/`.
    - Extracts metadata from images and videos.
    - Extracts multiple frames from every downloadable video.
    - Computes basic visual signals (size, aspect ratio, brightness, RGB statistics).
-   - Sends selected images/video frames to the configured vision-capable text model for visual analysis.
+   - Sends selected images/video frames to the configured vision model for visual analysis.
 
-2. **Verification actually triggers generation**
-   - `POST /api/projects/<id>/verify` verifies the prompts and immediately calls the generation pipeline.
-   - The UI button is now **Verify & Generate Now**.
-   - Generation errors are surfaced in the UI instead of silently stopping the workflow.
+2. **Verification triggers generation**
+   - `POST /api/projects/<id>/verify` verifies prompts and immediately runs the generation pipeline.
+   - Generation errors are surfaced in the UI.
 
 3. **Reference-aware generation**
-   - OpenRouter image generation can use extracted reference images.
-   - OpenRouter video generation can use the first extracted image or a representative video frame as its opening frame.
+   - OpenRouter image/video generation can use extracted reference images.
    - One OpenRouter API key powers copy, visual analysis, images, and video.
+   - Agnes AI provides an alternative provider for all creative types.
    - Local fallbacks keep the UI testable without API keys.
 
 4. **Persistent learning**
@@ -60,7 +58,7 @@ Reference ingestion
              |             |
            Image         Video
              |             |
-        OpenRouter      OpenRouter/local
+        OpenRouter      OpenRouter/local/Agnes
              |             |
              +------+------+
                     |
@@ -76,11 +74,14 @@ Reference ingestion
                         regenerate
 ```
 
-## Installation — Windows
+## First-Run Checklist
 
-Do not install this into the same Python environment as unrelated LangChain/LiveKit/rembg projects. Use a dedicated virtual environment.
+### 1. Create virtual environment
+
+Do not install this into the same Python environment as unrelated projects. Use a dedicated virtual environment.
 
 ```powershell
+cd "C:\Users\ABHISHEK KUMAR\Desktop\M & A\AI CREATIVE g"
 py -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
@@ -89,80 +90,81 @@ python -m pip install -r requirements.txt
 python -m pip check
 ```
 
-Expected:
+Expected: `No broken requirements found.`
 
-```text
-No broken requirements found.
+### 2. Configure API keys
+
+Copy `.env.example` to `.env` (or use the existing `.env`):
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-## Configure `.env`
-
-Copy `.env.example` to `.env` and fill the keys you actually use.
+Edit `.env` and set your actual API keys:
 
 ```env
-OPENROUTER_API_KEY=your-key-here
-OPENROUTER_TEXT_MODEL=openai/gpt-4o-mini
-OPENROUTER_VISION_MODEL=openai/gpt-4o-mini
-OPENROUTER_IMAGE_MODEL=bytedance-seed/seedream-4.5
-OPENROUTER_VIDEO_MODEL=google/veo-3.1
-OPENROUTER_VIDEO_RATIO=16:9
-OPENROUTER_VIDEO_RESOLUTION=720p
+OPENROUTER_API_KEY=sk-or-v1-your-actual-key
+AGNES_API_KEY=sk-your-agnes-key
 ```
 
-Never commit `.env`.
+### 3. Configure model IDs
 
-## Start
+Set the model IDs for the services you want to use. The defaults work for text:
+
+```env
+OPENROUTER_TEXT_MODEL=openrouter/free
+AGNES_TEXT_MODEL=agnes-2.5-flash
+AGNES_IMAGE_MODEL=agnes-image-2.1-flash
+AGNES_VIDEO_MODEL=agnes-video-v2.0
+```
+
+For image/video generation, set models enabled for your OpenRouter account:
+
+```env
+OPENROUTER_IMAGE_MODEL=openai/dall-e-3
+OPENROUTER_VIDEO_MODEL=google/veo-2
+```
+
+> **Note:** `openrouter/free` provides free text and vision routing only. Image/video generation requires model IDs that support those endpoints and, in most cases, account credit.
+
+### 4. Start the server
 
 ```powershell
 python app.py
 ```
 
-Open:
+Open: `http://127.0.0.1:5000`
 
-```text
-http://127.0.0.1:5000
-```
+## Provider Configuration
 
-## Production deployment
+| Provider | API Key Variable | Image Model | Video Model | Text Model |
+|----------|-----------------|-------------|-------------|------------|
+| OpenRouter | `OPENROUTER_API_KEY` | `OPENROUTER_IMAGE_MODEL` | `OPENROUTER_VIDEO_MODEL` | `OPENROUTER_TEXT_MODEL` |
+| Agnes AI | `AGNES_API_KEY` | `AGNES_IMAGE_MODEL` | `AGNES_VIDEO_MODEL` | `AGNES_TEXT_MODEL` |
 
-Set `ENVIRONMENT=production`, `FLASK_DEBUG=0`, and a long random `SECRET_KEY`. Run behind a TLS reverse proxy and start with a production WSGI server:
+- If a model ID is blank, that option shows as unavailable in the UI with a specific message.
+- If an API key is missing, all models for that provider show as unavailable.
+- Local fallbacks are always available regardless of API configuration.
+
+## Video Duration Constraints
+
+| Provider | Supported Durations |
+|----------|-------------------|
+| OpenRouter (Veo/Seedance) | 4, 6, 8 seconds |
+| Agnes AI | 5, 6, 8, 10 seconds |
+| Local fallback | Any duration |
+
+The app auto-snaps the requested duration to the nearest supported value for the selected model.
+
+## Production Deployment
+
+Set `ENVIRONMENT=production`, `FLASK_DEBUG=0`, and a long random `SECRET_KEY`. Run behind a TLS reverse proxy:
 
 ```powershell
 waitress-serve --host=127.0.0.1 --port=5000 app:app
 ```
 
-`OPENROUTER_SITE_URL` should be your public HTTPS URL. Keep `.env` out of source control, rotate a key that has been exposed, and place authentication in front of this application before exposing it publicly. Reference fetching blocks private/loopback addresses by default; set `ALLOW_PRIVATE_REFERENCE_URLS=1` only in a trusted internal deployment.
-
-## Recommended production workflow
-
-### Image + video reference
-
-1. Enter a reference URL or upload files.
-2. Click **Start reference extraction**.
-3. Confirm extracted image/video counts and video-frame count.
-4. Click **Build prompts from references**.
-5. Inspect the visual-reference analysis included in the prompts.
-6. Edit prompts and add reviewer corrections.
-7. Click **Save review & refine**.
-8. Tick the verification checkbox.
-9. Click **Verify & Generate Now**.
-10. The backend automatically generates all requested outputs.
-11. Review outputs.
-12. Reject with precise corrections if necessary.
-13. The agent writes the review to JSON, refines the prompt and regenerates.
-
-## Provider behavior
-
-- `OPENROUTER_API_KEY` is the only hosted-provider credential.
-- OpenRouter's chat-completions API powers copy and visual analysis; its image and asynchronous video APIs power media generation.
-- Image/video model availability and pricing are controlled by your OpenRouter account. Set the model IDs in `.env` to options available to that account.
-- If hosted generation fails, the UI receives a clearly marked local fallback so the review workflow remains testable.
-
-## Important note about "learning"
-
-The JSON memory is **prompt-level continual learning**, not automatic neural-network weight training. It retrieves previous human feedback and injects it into future prompt generation. This avoids falsely claiming that a foundation model has been retrained just because feedback was saved to JSON.
-
-## Data directories
+## Data Directories
 
 ```text
 data/
@@ -177,30 +179,50 @@ data/
 └── outputs/
 ```
 
-## Current API endpoints
+## API Endpoints
 
-- `POST /api/projects`
-- `POST /api/projects/<id>/scrape`
-- `POST /api/projects/<id>/upload-reference`
-- `POST /api/projects/<id>/prompts`
-- `POST /api/projects/<id>/review`
-- `POST /api/projects/<id>/verify` — verifies and immediately generates
-- `POST /api/projects/<id>/generate` — manual retry/regeneration
-- `GET /api/projects/<id>/models`
-- `POST /api/projects/<id>/final-review`
-- `GET /api/learning`
-- `GET /api/health`
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Provider health check |
+| `/api/models` | GET | Available models per creative type |
+| `/api/learning` | GET | Review memory stats |
+| `/api/projects` | POST | Create a new project |
+| `/api/projects/<id>` | GET | Get project state |
+| `/api/projects/<id>/scrape` | POST | Extract reference intelligence |
+| `/api/projects/<id>/upload-reference` | POST | Upload reference files |
+| `/api/projects/<id>/prompts` | POST | Build production prompts |
+| `/api/projects/<id>/review` | POST | Save and refine prompts |
+| `/api/projects/<id>/verify` | POST | Verify and generate |
+| `/api/projects/<id>/generate` | POST | Manual retry/regeneration |
+| `/api/projects/<id>/auto-run` | POST | Full pipeline (extract + prompt + generate) |
+| `/api/projects/<id>/final-review` | POST | Submit final review |
 
 ## Troubleshooting
 
-### The reference page has no images
-Some sites render images through JavaScript, CSS, login walls, or bot protection. In that case upload the reference image/video directly through the UI.
+### "Set OPENROUTER_IMAGE_MODEL in .env" in model dropdown
 
-### Video URL is a streaming playlist
-Some pages expose HLS/DASH manifests rather than a simple MP4. The application currently handles common downloadable video URLs and embedded video links. For protected streaming, download the permitted source yourself and upload the video.
+The OpenRouter API key is present but no image model ID is configured. Set `OPENROUTER_IMAGE_MODEL` in `.env` to a model enabled for your account (e.g., `openai/dall-e-3`).
+
+### "Set OPENROUTER_API_KEY in .env" for all OpenRouter models
+
+Your OpenRouter API key is not configured. Add it to `.env` and restart the Flask server.
+
+### Agnes video fails with mode error
+
+The app uses `keyframes` mode for reference-based video and `ti2vid` for text-to-video, matching the Agnes API specification.
+
+### The reference page has no images
+
+Some sites render images through JavaScript, CSS, login walls, or bot protection. Upload the reference image/video directly through the UI.
 
 ### Generation appears to stop after verification
-This version removes the previous UI dependency: verification directly invokes the generation pipeline. Check the status message and `data/projects.json`. API/provider errors are stored in the generated output's `warning` field when the local fallback is used.
+
+Check the status message and `data/projects.json`. API/provider errors are stored in the generated output's `warning` field when the local fallback is used.
 
 ### API conflicts with another project
-Use `.venv` for this project. Do not share the same environment with LiveKit/LangChain/rembg applications.
+
+Use `.venv` for this project. Do not share the same environment with other Python applications.
+
+## Important Note About "Learning"
+
+The JSON memory is **prompt-level continual learning**, not automatic neural-network weight training. It retrieves previous human feedback and injects it into future prompt generation.
