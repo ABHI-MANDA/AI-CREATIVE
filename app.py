@@ -39,6 +39,7 @@ def health():
         'environment': config.ENVIRONMENT,
         'openrouter_configured': bool(config.OPENROUTER_API_KEY),
         'openrouter': auth_info,
+        'providers': ai.provider_status(),
         'learning': learning.summary()
     })
 
@@ -60,6 +61,7 @@ def create():
         'url': (d.get('url') or '').strip(),
         'brief': brief,
         'creative_types': types,
+        'creative_settings': d.get('creative_settings') or {},
         'stage': 'created',
         'scraped': None,
         'prompt_bundle': None,
@@ -148,14 +150,38 @@ def review(pid):
     persist()
     return jsonify(p)
 
+def _normalize_settings(p, creative_type, chosen):
+    """Ensure video duration matches the selected model's supported values."""
+    settings = dict((p.get('creative_settings') or {}).get(creative_type) or {})
+    if creative_type == 'video':
+        requested = settings.get('duration', config.VIDEO_SECONDS)
+        settings['duration'] = model_router.snap_duration_for_model(chosen, requested)
+    return settings
+
+
 def _generate_all(p, forced=None):
     forced = forced or {}
     results = {}
     for c in p['creative_types']:
         opts = {m['id']: m for m in model_router.available_models(c)}
-        chosen = opts.get(forced.get(c)) if forced.get(c) in opts and opts[forced[c]]['usable'] else model_router.select_model(c, p['reviewed_prompts'].get(c, ''))
+        chosen = None
+        if forced.get(c) and forced[c] in opts and opts[forced[c]]['usable']:
+            chosen = opts[forced[c]]
+        if not chosen:
+            chosen = model_router.select_model(c, p['reviewed_prompts'].get(c, ''))
+        if not chosen:
+            raise RuntimeError(f'No usable model is configured for {c}. Add the provider API key or select a local fallback.')
         p['chosen_models'][c] = chosen
-        r = generator.generate(c, p['reviewed_prompts'].get(c, p['brief']), chosen, p['scraped'].get('assets', []) if p.get('scraped') else [])
+        settings = _normalize_settings(p, c, chosen)
+        # Persist normalized settings so UI and retries stay consistent
+        p.setdefault('creative_settings', {})[c] = settings
+        r = generator.generate(
+            c,
+            p['reviewed_prompts'].get(c, p['brief']),
+            chosen,
+            p['scraped'].get('assets', []) if p.get('scraped') else [],
+            settings,
+        )
         p['outputs'][c] = r
         results[c] = r
         log(p, f"Generated {c} with {r.get('model_used', 'engine')}.")
@@ -192,8 +218,14 @@ def auto_run(pid):
     """1-Click End-to-End Pipeline: Ingest -> Prompt -> Generate."""
     p = getp(pid)
     if not p: return jsonify(error='Project not found'), 404
+    body = request.get_json(silent=True) or {}
+    forced_models = body.get('models') or {}
+    # Allow client to refresh creative settings (duration, ratio, size, mood)
+    if isinstance(body.get('creative_settings'), dict):
+        p['creative_settings'] = body['creative_settings']
+        persist()
 
-    def _pipeline(proj):
+    def _pipeline(proj, forced):
         with GENERATION_LOCK:
             proj['generation_running'] = True
             proj['generation_error'] = None
@@ -215,10 +247,10 @@ def auto_run(pid):
             proj['verified'] = True
             persist()
 
-            # 3. Generate
+            # 3. Generate with user-selected models
             log(proj, 'Step 3/3: Synthesizing campaign creatives (Copy / Image / Video)...')
             persist()
-            _generate_all(proj)
+            _generate_all(proj, forced)
             log(proj, 'Full campaign launch complete! Ready for review.')
         except Exception as err:
             proj['stage'] = 'generation_failed'
@@ -229,7 +261,7 @@ def auto_run(pid):
             proj['generation_running'] = False
             persist()
 
-    threading.Thread(target=_pipeline, args=(p,), daemon=True, name=f"autorun-{p['id']}").start()
+    threading.Thread(target=_pipeline, args=(p, forced_models), daemon=True, name=f"autorun-{p['id']}").start()
     return jsonify(p), 202
 
 @app.route('/api/projects/<pid>/verify', methods=['POST'])
@@ -243,6 +275,8 @@ def verify(pid):
         else:
             p['reviewed_prompts'] = {c: p['brief'] for c in p['creative_types']}
     d = request.get_json(silent=True) or {}
+    if isinstance(d.get('creative_settings'), dict):
+        p['creative_settings'] = d['creative_settings']
     p['verified'] = True
     log(p, 'Prompt verified. Starting generation.')
     _start_generation(p, d.get('models', {}))
@@ -252,10 +286,17 @@ def verify(pid):
 def generate(pid):
     p = getp(pid)
     if not p: return jsonify(error='Project not found'), 404
+    d = request.get_json(silent=True) or {}
+    if isinstance(d.get('creative_settings'), dict):
+        p['creative_settings'] = d['creative_settings']
     p['verified'] = True
-    if not _start_generation(p, (request.get_json(silent=True) or {}).get('models', {})):
+    if not _start_generation(p, d.get('models', {})):
         return jsonify(error='Generation is already running.', project=p), 409
     return jsonify(p), 202
+@app.route('/api/models')
+def all_models():
+    return jsonify({c: model_router.available_models(c) for c in ("copy", "image", "video")})
+
 @app.route('/api/projects/<pid>/models')
 def models(pid):
     p=getp(pid)
@@ -271,7 +312,7 @@ def final_review(pid):
         approved=bool(dec.get('approved')); notes=(dec.get('notes') or '').strip(); rating=dec.get('rating'); p['final_review'][c]={'approved':approved,'notes':notes,'rating':rating,'timestamp':time.time()}
         learning.record_review(p['id'],c,p['reviewed_prompts'].get(c,''),p['outputs'][c]['filename'],approved,notes,rating)
         if not approved and notes:
-            p['reviewed_prompts'][c]=prompt_engine.refine_with_llm(p['reviewed_prompts'][c],notes,c); chosen=p['chosen_models'].get(c) or model_router.select_model(c); p['outputs'][c]=generator.generate(c,p['reviewed_prompts'][c],chosen,p['scraped'].get('assets',[])); log(p,f'Regenerated {c} using final-review corrections.')
+            p['reviewed_prompts'][c]=prompt_engine.refine_with_llm(p['reviewed_prompts'][c],notes,c); chosen=p['chosen_models'].get(c) or model_router.select_model(c); p['outputs'][c]=generator.generate(c,p['reviewed_prompts'][c],chosen,p['scraped'].get('assets',[]),p.get('creative_settings',{}).get(c,{})); log(p,f'Regenerated {c} using final-review corrections.')
     if p['outputs'] and set(p['outputs'])==set(p['final_review']) and all(x.get('approved') for x in p['final_review'].values()):p['stage']='final_reviewed'
     else:p['stage']='generated'
     persist();return jsonify(p)
