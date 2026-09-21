@@ -1,22 +1,106 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{app_name}} • Production Campaign Agent</title><link rel="stylesheet" href="{{url_for('static',filename='style.css')}}"></head><body>
-<header><div><b>◆ {{app_name}}</b><span> Reference-Aware Agent • Web Ingestion • Multi-Modal Campaign Studio</span></div><div id="health" class="health-badge"><span class="dot"></span> Connecting…</div></header>
-<main><section class="hero"><div><small>ENTERPRISE AGENTIC WORKFLOW</small><h1>Extract Data → Understand Identity → Generate Multi-Modal Campaign</h1><p>Autonomous agent that extracts live brand intelligence from websites, ingests visual assets, synthesizes targeted multi-channel copy, and generates high-fidelity images and dynamic motion videos.</p></div><button id="newBtn" class="ghost">New campaign</button></section>
-<div class="layout"><aside><div class="card"><h3>Pipeline Status</h3><div id="steps"></div></div><div class="card"><h3>Creative Memory</h3><div id="memory">Loading…</div></div></aside><section>
-<div class="card" id="inputCard"><h2>1. Creative Brief & Web Reference</h2>
-<label>Website URL <span>(Extracts logos, brand colors, copy, and visual context)</span></label><input id="url" placeholder="https://example.com (e.g. https://justflip.in/)">
-<label>Upload Reference Images/Videos <span>(Optional additional assets)</span></label><input id="files" type="file" multiple accept="image/*,video/mp4,video/webm,video/quicktime"><div id="uploadStatus" class="muted"></div>
-<label>Campaign Objectives & Requirements <span>(What should the agent produce?)</span></label><textarea id="brief" rows="4" placeholder="Example: Create a high-converting luxury campaign with cinematic visual aesthetic and engaging social media ad copy."></textarea>
-<label>Output Creative Types</label>
-<div class="checks"><label><input type="checkbox" value="copy" checked> Copy (Multi-Channel)</label><label><input type="checkbox" value="image" checked> Image (High-Res)</label><label><input type="checkbox" value="video" checked> Video (Cinematic MP4)</label></div>
-<div class="action-buttons">
-<button class="primary highlight-btn" id="autoLaunchBtn">🚀 Launch Full Campaign (1-Click)</button>
-<button class="secondary" id="create">Step-by-Step Mode (Review Prompts First)</button>
-</div>
-<div id="status" class="status"></div></div>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{app_name}} • AI Creative Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{url_for('static',filename='style.css')}}">
+</head>
+<body>
+<div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+<header>
+  <div class="brand"><div class="brand-mark">&#10022;</div><div><b>{{app_name}}</b><span>AI Creative Intelligence Studio</span></div></div>
+  <div class="header-right"><div id="providerStatus" class="provider-pills"></div><div id="health" class="health-badge"><span class="dot"></span> Connecting&#8230;</div></div>
+</header>
+<main>
+<section class="hero">
+  <div>
+    <div class="eyebrow">REFERENCE-AWARE &#8226; MULTI-MODEL &#8226; PRODUCTION CREATIVE</div>
+    <h1>Turn ideas & references into <span>campaign-ready creatives.</span></h1>
+    <p>Analyze a website, images or videos, choose OpenRouter or Agnes for each deliverable, customize duration &amp; style, and generate polished copy, imagery and motion from one workspace.</p>
+    <div class="hero-tags"><span>&#9673; Web intelligence</span><span>&#9673; Visual references</span><span>&#9673; Model control</span><span>&#9673; Custom duration &amp; size</span><span>&#9673; Review memory</span></div>
+  </div>
+  <button id="newBtn" class="ghost">&#65291; New campaign</button>
+</section>
 
-<div class="card hidden" id="referenceCard"><h2>2. Extracted Reference Intelligence</h2><div id="reference"></div><button class="primary" id="promptBtn">Build Prompts from References</button></div>
-<div class="card hidden" id="promptCard"><h2>3. Production Prompt Studio</h2><p class="muted">The prompts below incorporate extracted website intelligence, visual tokens, and past review memory.</p><div id="prompts"></div><div class="action-buttons"><button class="primary" id="reviewBtn">Save & Refine with AI</button><button class="primary highlight-btn" id="verifyBtn">⚡ Generate Campaign Now</button></div></div>
-<div class="card hidden" id="verifyCard"><div id="genStatus" class="status"></div></div>
-<div class="card hidden" id="modelCard"><h2>4. Models & Creative Engines</h2><div id="models"></div></div>
-<div class="card hidden" id="outputCard"><h2>5. Production Campaign Deliverables</h2><p class="muted">Review, preview, and download your multi-channel marketing deliverables.</p><div id="outputs"></div><button class="primary" id="finalBtn">Submit Feedback & Update Agent Memory</button></div>
-</section></div></main><script src="{{url_for('static',filename='script.js')}}"></script></body></html>
+<div class="layout">
+<aside>
+  <div class="card sticky-card"><div class="card-kicker">WORKFLOW</div><h3>Production pipeline</h3><div id="steps"></div></div>
+  <div class="card"><div class="card-kicker">MEMORY</div><div id="memory">Loading&#8230;</div></div>
+</aside>
+
+<section>
+<div class="card" id="inputCard">
+  <div class="section-head"><div><div class="card-kicker">01 &#8226; BRIEF</div><h2>Creative brief &amp; references</h2></div><div class="badge">AI WORKSPACE</div></div>
+  <label>Website URL <span>Extract brand copy, visuals, colors and context</span></label>
+  <input id="url" placeholder="https://example.com">
+  <label>Reference images / videos <span>Upload additional creative direction</span></label>
+  <input id="files" type="file" multiple accept="image/*,video/mp4,video/webm,video/quicktime">
+  <div id="uploadStatus" class="muted"></div>
+  <label>Campaign objectives &amp; requirements</label>
+  <textarea id="brief" rows="5" placeholder="Describe the campaign, audience, product, tone, visual style, platform and any must-follow constraints&#8230;"></textarea>
+
+  <div class="control-grid">
+    <div>
+      <label>Output formats</label>
+      <div class="checks"><label><input type="checkbox" value="copy" checked> Copy</label><label><input type="checkbox" value="image" checked> Image</label><label><input type="checkbox" value="video" checked> Video</label></div>
+    </div>
+    <div>
+      <label>Visual mood</label>
+      <select id="mood"><option>Premium &amp; cinematic</option><option>Luxury editorial</option><option>Bold &amp; energetic</option><option>Minimal &amp; modern</option><option>Natural &amp; authentic</option><option>Futuristic &amp; high-tech</option></select>
+    </div>
+  </div>
+
+  <div class="studio-panel">
+    <div class="studio-head">
+      <div>
+        <div class="card-kicker">MODEL CONTROL</div>
+        <h3>Choose the engine for each deliverable</h3>
+      </div>
+      <span class="muted">OpenRouter &amp; Agnes side-by-side</span>
+    </div>
+    <div id="modelControls" class="model-grid"></div>
+    <div class="studio-hint">Each provider needs a valid API key and model ID in your <code>.env</code> file. Local fallbacks are always available if a hosted model is not configured.</div>
+    <div class="custom-grid">
+      <div>
+        <label>Image size</label>
+        <select id="imageSize">
+          <option value="1024x1024">1024 &#215; 1024</option>
+          <option value="1024x1536">1024 &#215; 1536</option>
+          <option value="1536x1024">1536 &#215; 1024</option>
+        </select>
+      </div>
+      <div>
+        <label>Video duration</label>
+        <select id="videoDuration"></select>
+        <small id="durationHint">Select a video model to see supported durations.</small>
+      </div>
+      <div>
+        <label>Video aspect ratio</label>
+        <select id="videoRatio"><option>16:9</option><option>9:16</option><option>1:1</option></select>
+      </div>
+      <div>
+        <label>Video resolution</label>
+        <select id="videoResolution"><option>720p</option><option>1080p</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="primary highlight-btn" id="autoLaunchBtn">&#10022; Launch full campaign</button>
+    <button class="secondary" id="create">Step-by-step review</button>
+  </div>
+  <div id="status" class="status hidden"></div>
+</div>
+
+<div class="card hidden" id="referenceCard"><div class="card-kicker">02 &#8226; INTELLIGENCE</div><h2>Extracted reference intelligence</h2><div id="reference"></div><button class="primary" id="promptBtn">Build production prompts</button></div>
+<div class="card hidden" id="promptCard"><div class="card-kicker">03 &#8226; PROMPT STUDIO</div><h2>Production prompt studio</h2><p class="muted">Review and edit the creative directives before generation.</p><div id="prompts"></div><div class="action-buttons"><button class="primary" id="reviewBtn">Save &amp; refine</button><button class="primary highlight-btn" id="verifyBtn">Generate now</button></div></div>
+<div class="card hidden" id="verifyCard"><div class="card-kicker">04 &#8226; GENERATION</div><div id="genStatus" class="status"></div></div>
+<div class="card hidden" id="modelCard"><div class="card-kicker">05 &#8226; ENGINES</div><h2>Generation engines used</h2><div id="models" class="model-grid"></div></div>
+<div class="card hidden" id="outputCard"><div class="card-kicker">06 &#8226; DELIVERABLES</div><h2>Production campaign</h2><p class="muted">Preview, download and review every generated deliverable.</p><div id="outputs"></div><button class="primary highlight-btn" id="finalBtn">Submit review &amp; teach the agent</button></div>
+</section></div>
+</main>
+<script src="{{url_for('static',filename='script.js')}}"></script>
+</body>
+</html>
