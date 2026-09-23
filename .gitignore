@@ -98,7 +98,6 @@ dmypy.json
 Thumbs.db
 
 # Application data
-data/
 logs/
 *.log
 *.pid
