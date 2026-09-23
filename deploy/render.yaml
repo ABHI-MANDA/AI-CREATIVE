@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: ai-creative-studio-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-production.txt
+    startCommand: gunicorn --worker-class gthread --threads 4 --timeout 900 --bind 0.0.0.0:$PORT backend.app:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: creative-assets
+      - key: SUPABASE_STORAGE_PUBLIC
+        value: "0"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_TEXT_MODEL
+        sync: false
+      - key: OPENROUTER_VISION_MODEL
+        sync: false
+      - key: OPENROUTER_IMAGE_MODEL
+        sync: false
+      - key: OPENROUTER_VIDEO_MODEL
+        sync: false
+      - key: AGNES_API_KEY
+        sync: false

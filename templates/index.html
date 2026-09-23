@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M & A • AI Creative Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{url_for('static',filename='style.css')}}">
+</head>
+<body>
+<div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+<header>
+  <div class="brand"><div class="brand-mark">&#10022;</div><div><b>{{app_name}}</b><span>AI Creative Intelligence Studio</span></div></div>
+  <div class="header-right"><div id="providerStatus" class="provider-pills"></div><div id="health" class="health-badge"><span class="dot"></span> Connecting&#8230;</div></div>
+</header>
+<main>
+<section class="hero">
+  <div>
+    <div class="eyebrow">REFERENCE-AWARE &#8226; MULTI-MODEL &#8226; SEQUENCED PIPELINE</div>
+    <h1>Turn ideas &amp; references into <span>campaign-ready creatives.</span></h1>
+    <p>Ingest a website or uploads, analyze visuals, engineer prompts, review each step, then generate copy, imagery and motion with the best available model — fully tracked from brief to final approval.</p>
+    <div class="hero-tags"><span>&#9673; Web + upload ingestion</span><span>&#9673; Frame extraction</span><span>&#9673; Visual analysis</span><span>&#9673; Human review gate</span><span>&#9673; Approve / refine loop</span></div>
+  </div>
+  <button id="newBtn" class="ghost">&#65291; New campaign</button>
+</section>
+
+<div class="layout">
+<aside>
+  <div class="card sticky-card">
+    <div class="card-kicker">WORKFLOW</div>
+    <h3>Production pipeline</h3>
+    <div id="steps"></div>
+    <div class="pipeline-progress"><div class="pipeline-progress-fill" id="pipelineFill"></div></div>
+    <div id="pipelinePct" class="muted pipeline-pct">0% complete</div>
+  </div>
+  <div class="card">
+    <div class="card-kicker">ACTIVITY</div>
+    <div id="activityLog" class="activity-log"><span class="muted">No activity yet — start a campaign to track each stage.</span></div>
+  </div>
+  <div class="card">
+    <div class="card-kicker">SETTINGS</div>
+    <h3>Connect AI providers</h3>
+    <p class="muted settings-copy">Keys stay in memory for this server process and are never shown again or written to disk.</p>
+    <label for="openrouterKey">OpenRouter API key</label>
+    <input id="openrouterKey" type="password" autocomplete="off" placeholder="sk-or-…">
+    <label for="agnesKey">Agnes AI API key</label>
+    <input id="agnesKey" type="password" autocomplete="off" placeholder="Enter key">
+    <button class="secondary settings-save" id="saveProviderKeys">Save provider keys</button>
+    <div id="providerSettingsStatus" class="muted settings-status"></div>
+  </div>
+  <div class="card"><div class="card-kicker">MEMORY</div><div id="memory">Loading&#8230;</div></div>
+</aside>
+
+<section>
+<div class="card" id="inputCard">
+  <div class="section-head"><div><div class="card-kicker">01 &#8226; BRIEF</div><h2>Creative brief &amp; references</h2></div><div class="badge">STEP 1 OF 7</div></div>
+  <label>Website URL <span>Extract brand copy, visuals, colors and context</span></label>
+  <input id="url" placeholder="https://example.com">
+  <label>Reference images / videos <span>Upload stills or clips — frames are extracted automatically</span></label>
+  <input id="files" type="file" multiple accept="image/*,video/mp4,video/webm,video/quicktime">
+  <div id="uploadStatus" class="muted"></div>
+  <label>Campaign objectives &amp; requirements</label>
+  <textarea id="brief" rows="5" placeholder="Describe the campaign, audience, product, tone, visual style, platform and any must-follow constraints&#8230;"></textarea>
+
+  <div class="control-grid">
+    <div>
+      <label>Creative types <span>Tick every deliverable you need</span></label>
+      <div class="checks type-checks" id="typeChecks">
+        <label class="check-chip">
+          <input type="checkbox" value="copy" checked>
+          <span class="tick-box" aria-hidden="true"></span>
+          <span class="check-text"><b>Copy</b><small>Headlines, captions, ads</small></span>
+        </label>
+        <label class="check-chip">
+          <input type="checkbox" value="image" checked>
+          <span class="tick-box" aria-hidden="true"></span>
+          <span class="check-text"><b>Image</b><small>Stills &amp; key visuals</small></span>
+        </label>
+        <label class="check-chip">
+          <input type="checkbox" value="video" checked>
+          <span class="tick-box" aria-hidden="true"></span>
+          <span class="check-text"><b>Video</b><small>Short motion creatives</small></span>
+        </label>
+      </div>
+    </div>
+    <div>
+      <label for="mood">Visual mood <span>Dropdown direction folded into every prompt</span></label>
+      <select id="mood">
+        <option value="Premium &amp; cinematic" selected>Premium &amp; cinematic</option>
+        <option value="Luxury editorial">Luxury editorial</option>
+        <option value="Bold &amp; energetic">Bold &amp; energetic</option>
+        <option value="Minimal &amp; modern">Minimal &amp; modern</option>
+        <option value="Natural &amp; authentic">Natural &amp; authentic</option>
+        <option value="Futuristic &amp; high-tech">Futuristic &amp; high-tech</option>
+        <option value="Playful &amp; vibrant">Playful &amp; vibrant</option>
+        <option value="Dark &amp; moody">Dark &amp; moody</option>
+        <option value="Retro &amp; vintage">Retro &amp; vintage</option>
+        <option value="Corporate &amp; professional">Corporate &amp; professional</option>
+        <option value="Warm &amp; cozy">Warm &amp; cozy</option>
+        <option value="Neon &amp; cyberpunk">Neon &amp; cyberpunk</option>
+        <option value="Earthy &amp; organic">Earthy &amp; organic</option>
+        <option value="Monochrome noir">Monochrome noir</option>
+        <option value="Playful illustration">Playful illustration</option>
+        <option value="Photorealistic documentary">Photorealistic documentary</option>
+      </select>
+      <small id="moodHint" class="muted">Applied to copy tone, image style and video look during prompt engineering.</small>
+    </div>
+  </div>
+
+  <div class="studio-panel">
+    <div class="studio-head">
+      <div>
+        <div class="card-kicker">MODEL CONTROL</div>
+        <h3>Choose the engine for each deliverable</h3>
+      </div>
+      <span class="muted">OpenRouter &amp; Agnes side-by-side</span>
+    </div>
+    <div id="modelControls" class="model-grid"></div>
+    <div class="studio-hint">Hosted models need an API key + model ID in <code>.env</code>. Local fallbacks always keep the pipeline moving.</div>
+    <div class="custom-grid">
+      <div>
+        <label>Image size</label>
+        <select id="imageSize">
+          <option value="1024x1024">1024 &#215; 1024</option>
+          <option value="1024x1536">1024 &#215; 1536</option>
+          <option value="1536x1024">1536 &#215; 1024</option>
+        </select>
+      </div>
+      <div>
+        <label>Video duration</label>
+        <select id="videoDuration"></select>
+        <small id="durationHint">Select a video model to see supported durations.</small>
+      </div>
+      <div>
+        <label>Video aspect ratio</label>
+        <select id="videoRatio"><option>16:9</option><option>9:16</option><option>1:1</option></select>
+      </div>
+      <div>
+        <label>Video resolution</label>
+        <select id="videoResolution"><option>720p</option><option>1080p</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="primary highlight-btn" id="autoLaunchBtn">&#10022; Launch full campaign</button>
+    <button class="secondary" id="create">Start step-by-step</button>
+  </div>
+  <div id="status" class="status hidden"></div>
+</div>
+
+<div class="card hidden" id="referenceCard">
+  <div class="section-head"><div><div class="card-kicker">02 &#8226; INGESTION</div><h2>Extracted reference intelligence</h2></div><div class="badge">STEP 2 OF 7</div></div>
+  <div id="reference"></div>
+  <div id="scrapeError" class="warn hidden"></div>
+  <button class="primary" id="promptBtn">Continue → Analyze &amp; build prompts</button>
+</div>
+
+<div class="card hidden" id="promptCard">
+  <div class="section-head"><div><div class="card-kicker">03&#8211;04 &#8226; PROMPT + REVIEW</div><h2>Production prompt studio</h2></div><div class="badge">STEPS 3&#8211;4 OF 7</div></div>
+  <p class="muted">Review, edit, or add feedback — the agent folds corrections into each directive before verification.</p>
+  <div id="prompts"></div>
+  <div class="action-buttons">
+    <button class="primary" id="reviewBtn">Save &amp; refine review</button>
+    <button class="primary highlight-btn" id="verifyBtn">Verify &amp; Generate Now</button>
+  </div>
+</div>
+
+<div class="card hidden" id="verifyCard">
+  <div class="section-head"><div><div class="card-kicker">05&#8211;06 &#8226; VERIFY + GENERATE</div><h2>Generation in progress</h2></div><div class="badge">STEPS 5&#8211;6 OF 7</div></div>
+  <div class="gen-track"><div class="gen-fill" id="genFill"></div></div>
+  <div id="genSteps" class="gen-steps"></div>
+  <div id="genStatus" class="status"></div>
+</div>
+
+<div class="card hidden" id="modelCard">
+  <div class="card-kicker">ENGINES</div><h2>Generation engines used</h2>
+  <div id="models" class="model-grid"></div>
+</div>
+
+<div class="card hidden" id="outputCard">
+  <div class="section-head"><div><div class="card-kicker">07 &#8226; FINAL REVIEW</div><h2>Production campaign</h2></div><div class="badge">STEP 7 OF 7</div></div>
+  <p class="muted">Approve deliverables to teach the agent — or reject with correction notes to refine prompts and regenerate.</p>
+  <div id="outputs"></div>
+  <button class="primary highlight-btn" id="finalBtn">Submit review &amp; teach the agent</button>
+</div>
+</section></div>
+</main>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="{{url_for('static',filename='script.js')}}"></script>
+</body>
+</html>
