@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>M & A • AI Creative Studio</title>
+<title>M &amp; A • AI Creative Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{url_for('static',filename='style.css')}}">
@@ -16,10 +16,17 @@
 <main>
 <section class="hero">
   <div>
-    <div class="eyebrow">REFERENCE-AWARE &#8226; MULTI-MODEL &#8226; SEQUENCED PIPELINE</div>
-    <h1>Turn ideas &amp; references into <span>campaign-ready creatives.</span></h1>
+    <div class="eyebrow">AUTOPILOT &bull; MULTI-PLATFORM &bull; ZERO-CLICK &bull; ENTERPRISE GRADE</div>
+    <h1>From brief to campaign-ready creatives <span>in seconds.</span></h1>
     <p>Ingest a website or uploads, analyze visuals, engineer prompts, review each step, then generate copy, imagery and motion with the best available model — fully tracked from brief to final approval.</p>
-    <div class="hero-tags"><span>&#9673; Web + upload ingestion</span><span>&#9673; Frame extraction</span><span>&#9673; Visual analysis</span><span>&#9673; Human review gate</span><span>&#9673; Approve / refine loop</span></div>
+    <div class="hero-tags">
+      <span>&#9889; Zero-click Autopilot</span>
+      <span>&#9670; AI Quality Gating</span>
+      <span>&#9679; Brand DNA Lock</span>
+      <span>&#8599; Multi-Platform</span>
+      <span>&#10022; A/B Variants</span>
+      <span>&#8635; Auto-Retry</span>
+    </div>
   </div>
   <button id="newBtn" class="ghost">&#65291; New campaign</button>
 </section>
@@ -33,6 +40,13 @@
     <div class="pipeline-progress"><div class="pipeline-progress-fill" id="pipelineFill"></div></div>
     <div id="pipelinePct" class="muted pipeline-pct">0% complete</div>
   </div>
+
+  <!-- BRAND DNA PANEL -->
+  <div class="card" id="brandDnaCard">
+    <div class="card-kicker">BRAND DNA</div>
+    <div id="brandDnaContent"><span class="muted">Brand DNA will be extracted after ingestion.</span></div>
+  </div>
+
   <div class="card">
     <div class="card-kicker">ACTIVITY</div>
     <div id="activityLog" class="activity-log"><span class="muted">No activity yet — start a campaign to track each stage.</span></div>
@@ -52,8 +66,95 @@
 </aside>
 
 <section>
+
+<!-- ═══════════════════════════════════════════════════════
+     AUTOPILOT BANNER
+════════════════════════════════════════════════════════ -->
+<div class="autopilot-banner" id="autopilotBanner">
+  <div class="autopilot-core">
+    <div class="autopilot-icon">&#9889;</div>
+    <div>
+      <h3>Autopilot Mode</h3>
+      <p>Zero-click: brief &rarr; full campaign in one shot. AI handles ingestion, analysis, generation, and quality gating automatically.</p>
+    </div>
+  </div>
+  <div class="autopilot-controls">
+    <label>Target Platforms</label>
+    <div class="platform-chips" id="platformChips">
+      <button class="platform-chip active" data-platform="instagram_feed" type="button">
+        <span>&#9679;</span> Instagram Feed
+      </button>
+      <button class="platform-chip active" data-platform="instagram_story" type="button">
+        <span>&#9632;</span> Story
+      </button>
+      <button class="platform-chip" data-platform="facebook_feed" type="button">
+        <span>&#9632;</span> Facebook
+      </button>
+      <button class="platform-chip" data-platform="linkedin" type="button">
+        <span>&#9670;</span> LinkedIn
+      </button>
+      <button class="platform-chip" data-platform="tiktok" type="button">
+        <span>&#9835;</span> TikTok
+      </button>
+      <button class="platform-chip" data-platform="twitter_x" type="button">
+        <span>&#10005;</span> Twitter/X
+      </button>
+      <button class="platform-chip" data-platform="google_display" type="button">
+        <span>&#9633;</span> Google Display
+      </button>
+    </div>
+    <div class="autopilot-actions">
+      <button class="primary autopilot-btn pulse-btn" id="autopilotBtn" type="button">&#9889; Launch Autopilot Campaign</button>
+      <span class="muted autopilot-hint">Runs all selected creative types &middot; AI quality-gates each output &middot; Auto-retries on failure</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     AUTOPILOT LIVE PROGRESS PANEL (hidden by default)
+════════════════════════════════════════════════════════ -->
+<div class="card hidden" id="autopilotProgress">
+  <div class="section-head" style="margin-bottom:1rem;">
+    <div>
+      <div class="card-kicker">AUTOPILOT RUNNING</div>
+      <h2 style="margin:6px 0 0;">Live campaign progress</h2>
+    </div>
+    <button class="secondary" id="autopilotCancelBtn" type="button" style="align-self:center;">&#10005; Cancel</button>
+  </div>
+
+  <!-- Current step -->
+  <div class="autopilot-step-row" id="autopilotCurrentStep">
+    <span class="spinner"></span>
+    <span id="autopilotStepLabel" style="font-size:0.85rem;font-weight:600;color:#e2e8f0;">Initializing&#8230;</span>
+  </div>
+
+  <!-- Progress bar + percentage -->
+  <div style="margin:1rem 0 0.4rem;display:flex;justify-content:space-between;align-items:center;">
+    <span class="muted" style="font-size:0.72rem;">Overall progress</span>
+    <span id="autopilotPct" style="font-size:0.72rem;font-weight:700;color:#38bdf8;">0%</span>
+  </div>
+  <div class="pipeline-progress" style="margin-bottom:0.75rem;">
+    <div class="pipeline-progress-fill" id="autopilotFill" style="width:0%"></div>
+  </div>
+
+  <!-- ETA countdown -->
+  <div style="display:flex;justify-content:space-between;margin-bottom:0.75rem;">
+    <span class="muted" style="font-size:0.72rem;">ETA</span>
+    <span id="autopilotEta" style="font-size:0.72rem;font-weight:600;color:#94a3b8;">Calculating&#8230;</span>
+  </div>
+
+  <!-- Live log stream -->
+  <div class="card-kicker" style="margin-bottom:0.4rem;">LIVE LOG</div>
+  <div class="autopilot-log" id="autopilotLog">
+    <span class="log-info">&#9656; Autopilot session started. Waiting for first event&#8230;</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     BRIEF & INPUT CARD  (Step 1 of 7)
+════════════════════════════════════════════════════════ -->
 <div class="card" id="inputCard">
-  <div class="section-head"><div><div class="card-kicker">01 &#8226; BRIEF</div><h2>Creative brief &amp; references</h2></div><div class="badge">STEP 1 OF 7</div></div>
+  <div class="section-head"><div><div class="card-kicker">01 &bull; BRIEF</div><h2>Creative brief &amp; references</h2></div><div class="badge">STEP 1 OF 7</div></div>
   <label>Website URL <span>Extract brand copy, visuals, colors and context</span></label>
   <input id="url" placeholder="https://example.com">
   <label>Reference images / videos <span>Upload stills or clips — frames are extracted automatically</span></label>
@@ -149,15 +250,21 @@
   <div id="status" class="status hidden"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     02 · INGESTION
+════════════════════════════════════════════════════════ -->
 <div class="card hidden" id="referenceCard">
-  <div class="section-head"><div><div class="card-kicker">02 &#8226; INGESTION</div><h2>Extracted reference intelligence</h2></div><div class="badge">STEP 2 OF 7</div></div>
+  <div class="section-head"><div><div class="card-kicker">02 &bull; INGESTION</div><h2>Extracted reference intelligence</h2></div><div class="badge">STEP 2 OF 7</div></div>
   <div id="reference"></div>
   <div id="scrapeError" class="warn hidden"></div>
-  <button class="primary" id="promptBtn">Continue → Analyze &amp; build prompts</button>
+  <button class="primary" id="promptBtn">Continue &rarr; Analyze &amp; build prompts</button>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     03–04 · PROMPT + REVIEW
+════════════════════════════════════════════════════════ -->
 <div class="card hidden" id="promptCard">
-  <div class="section-head"><div><div class="card-kicker">03&#8211;04 &#8226; PROMPT + REVIEW</div><h2>Production prompt studio</h2></div><div class="badge">STEPS 3&#8211;4 OF 7</div></div>
+  <div class="section-head"><div><div class="card-kicker">03&#8211;04 &bull; PROMPT + REVIEW</div><h2>Production prompt studio</h2></div><div class="badge">STEPS 3&#8211;4 OF 7</div></div>
   <p class="muted">Review, edit, or add feedback — the agent folds corrections into each directive before verification.</p>
   <div id="prompts"></div>
   <div class="action-buttons">
@@ -166,27 +273,74 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     05–06 · VERIFY + GENERATE
+════════════════════════════════════════════════════════ -->
 <div class="card hidden" id="verifyCard">
-  <div class="section-head"><div><div class="card-kicker">05&#8211;06 &#8226; VERIFY + GENERATE</div><h2>Generation in progress</h2></div><div class="badge">STEPS 5&#8211;6 OF 7</div></div>
+  <div class="section-head"><div><div class="card-kicker">05&#8211;06 &bull; VERIFY + GENERATE</div><h2>Generation in progress</h2></div><div class="badge">STEPS 5&#8211;6 OF 7</div></div>
   <div class="gen-track"><div class="gen-fill" id="genFill"></div></div>
   <div id="genSteps" class="gen-steps"></div>
   <div id="genStatus" class="status"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     ENGINES CARD
+════════════════════════════════════════════════════════ -->
 <div class="card hidden" id="modelCard">
   <div class="card-kicker">ENGINES</div><h2>Generation engines used</h2>
   <div id="models" class="model-grid"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     07 · FINAL REVIEW — Multi-Variant Quality Results
+════════════════════════════════════════════════════════ -->
 <div class="card hidden" id="outputCard">
-  <div class="section-head"><div><div class="card-kicker">07 &#8226; FINAL REVIEW</div><h2>Production campaign</h2></div><div class="badge">STEP 7 OF 7</div></div>
+  <div class="section-head">
+    <div><div class="card-kicker">07 &bull; FINAL REVIEW</div><h2>Production campaign</h2></div>
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+      <div class="badge">STEP 7 OF 7</div>
+      <button class="secondary" id="downloadAllBtn" type="button" style="font-size:0.72rem;padding:6px 12px;">&#8659; Download All</button>
+    </div>
+  </div>
   <p class="muted">Approve deliverables to teach the agent — or reject with correction notes to refine prompts and regenerate.</p>
-  <div id="outputs"></div>
-  <button class="primary highlight-btn" id="finalBtn">Submit review &amp; teach the agent</button>
+
+  <!-- PLATFORM VARIANT TABS (for copy outputs) -->
+  <div class="variant-tabs" id="variantTabs" style="display:none;">
+    <button class="variant-tab active" data-tab="instagram" type="button">Instagram</button>
+    <button class="variant-tab" data-tab="facebook" type="button">Facebook</button>
+    <button class="variant-tab" data-tab="linkedin" type="button">LinkedIn</button>
+    <button class="variant-tab" data-tab="tiktok" type="button">TikTok</button>
+    <button class="variant-tab" data-tab="twitter" type="button">Twitter/X</button>
+    <button class="variant-tab" data-tab="google" type="button">Google Ads</button>
+  </div>
+
+  <!-- Output results grid -->
+  <div id="outputs" class="outputs-quality-grid"></div>
+
+  <button class="primary highlight-btn" id="finalBtn" style="margin-top:1.25rem;">Submit review &amp; teach the agent</button>
 </div>
+
 </section></div>
 </main>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="{{url_for('static',filename='script.js')}}"></script>
+
+<script>
+/* ── Platform chip toggle ── */
+document.querySelectorAll('.platform-chip').forEach(chip => {
+  chip.addEventListener('click', () => chip.classList.toggle('active'));
+});
+
+/* ── Variant tab switcher ── */
+document.querySelectorAll('.variant-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.variant-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    const target = document.querySelector(`.variant-content[data-tab="${tab.dataset.tab}"]`);
+    if (target) target.classList.add('active');
+  });
+});
+</script>
 </body>
 </html>

@@ -19,12 +19,13 @@ TEST_DATA_DIR = tempfile.mkdtemp(prefix="ai_creative_test_")
 
 # Override config paths before importing modules that use them
 import core.config as config_module
-config_module.DATA_DIR = os.path.join(TEST_DATA_DIR, "data")
-config_module.OUTPUT_DIR = os.path.join(config_module.DATA_DIR, "outputs")
-config_module.REFERENCE_DIR = os.path.join(config_module.DATA_DIR, "reference_assets")
-config_module.REVIEW_STORE = os.path.join(config_module.DATA_DIR, "reviews.json")
-config_module.PROJECT_STORE = os.path.join(config_module.DATA_DIR, "projects.json")
-config_module.MEMORY_STORE = os.path.join(config_module.DATA_DIR, "creative_memory.json")
+from pathlib import Path
+config_module.DATA_DIR = Path(TEST_DATA_DIR) / "data"
+config_module.OUTPUT_DIR = config_module.DATA_DIR / "outputs"
+config_module.REFERENCE_DIR = config_module.DATA_DIR / "reference_assets"
+config_module.REVIEW_STORE = config_module.DATA_DIR / "reviews.json"
+config_module.PROJECT_STORE = config_module.DATA_DIR / "projects.json"
+config_module.MEMORY_STORE = config_module.DATA_DIR / "creative_memory.json"
 
 for path in (config_module.DATA_DIR, config_module.OUTPUT_DIR, config_module.REFERENCE_DIR):
     os.makedirs(path, exist_ok=True)

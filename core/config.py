@@ -44,9 +44,10 @@ OPENROUTER_APP_TITLE = env("OPENROUTER_APP_TITLE", APP_NAME)
 OPENROUTER_TEXT_MODEL = env("OPENROUTER_TEXT_MODEL", "openrouter/free")
 OPENROUTER_FALLBACK_TEXT_MODEL = env("OPENROUTER_FALLBACK_TEXT_MODEL", "")
 OPENROUTER_VISION_MODEL = env("OPENROUTER_VISION_MODEL", OPENROUTER_TEXT_MODEL)
-# Media generation is optional and normally billed. Leave these blank until a
-# model available to this account has been selected.
-OPENROUTER_IMAGE_MODEL = env("OPENROUTER_IMAGE_MODEL")
+# This free OpenRouter model is generation-only and does not accept references.
+OPENROUTER_IMAGE_MODEL = env("OPENROUTER_IMAGE_MODEL", "inclusionai/ming-image-0.1-design")
+# OpenRouter currently has no free video-generation model. Blank selects the
+# local renderer, which keeps the default video path free.
 OPENROUTER_VIDEO_MODEL = env("OPENROUTER_VIDEO_MODEL")
 OPENROUTER_VIDEO_RATIO = env("OPENROUTER_VIDEO_RATIO", "16:9")
 OPENROUTER_VIDEO_RESOLUTION = env("OPENROUTER_VIDEO_RESOLUTION", "720p")

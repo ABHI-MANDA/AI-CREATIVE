@@ -1,11 +1,30 @@
-# AI Creative Studio — Reference-Aware Agent v0.0.3
+# AI Creative Studio — Enterprise Autopilot & Multi-Platform Engine v2.0
 
-> **Internal use at Mark-Anthony Ventures.** This project is in its initial
-> testing phase and is not yet a multi-user production service.
+> **Enterprise Automation Grade.** Designed for zero-click autonomous campaign generation with minimal human intervention, generating ultra-high-quality copy, images, and video ads from reference intelligence and creative briefs.
 
-A Flask application for reference-driven image, video, and copy generation with persistent human-review memory, real-time progress updates, and enterprise-grade security.
+A production-ready Flask application featuring a zero-click **Autopilot Engine**, persistent **Brand DNA extraction**, **AI-powered Quality Gating** with auto-retry, **Multi-Platform Targeting**, and parallel multi-variant generation.
 
-## Features
+## ⚡ Enterprise Features (v2.0)
+
+### 0. Zero-Click Autopilot Mode (`core/autopilot.py`)
+- **Single-Click to Campaign**: Ingests brief & references, extracts brand DNA, builds multi-platform prompts, runs parallel generation, quality-gates every output, and packages a complete campaign bundle with zero human intervention.
+- **Autonomous Quality Gating**: Every output is scored (0–100) using deterministic + AI checks. Outputs scoring < 70 are automatically prompt-refined and regenerated (up to 3 retries).
+- **Parallel Multi-Platform Execution**: Concurrently generates assets tailored for Instagram (Feed, Story, Reel), Facebook, LinkedIn, TikTok, Twitter/X, and Google Ads.
+- **Real-Time Live Streaming**: Socket.IO progress streaming with ETA countdown, step tracking, and rolling terminal log.
+
+### 1. Brand DNA Intelligence (`core/brand_manager.py`)
+- **Automated Brand Profile**: Extracts palette (hex/names), lighting cues, composition ratios, tone of voice adjectives, typography styles, and do/don't rules from references.
+- **Brand Consistency Lock**: Automatically injects extracted Brand DNA blocks into every downstream prompt.
+
+### 2. Multi-Variant Prompt Engineering (`core/prompt_engine.py`)
+- **4 Strategic Image Variants**: Generates lifestyle, studio editorial, cinematic widescreen, and minimalist flat-lay prompts per brief.
+- **Platform-Specific Copy Frameworks**: Hooks, bodies, CTAs, and character limits tailored per social platform.
+- **Storyboard-Style Video Directives**: Shot-by-shot timing, motion paths, subject actions, and CTA frames.
+
+### 3. Campaign Packager (`core/campaign_packager.py`)
+- **Structured Campaign Bundles**: JSON-serializable manifest + self-contained HTML preview card.
+- **Platform Spec Validation**: Validates dimensions, aspect ratios, durations, and character lengths against platform guidelines.
+- **One-Click Manifest Export**: Instant bulk export of all generated assets and metadata.
 
 ### 1. Real Reference Extraction & Intelligence
 - **Web scraping**: Downloads HTML images, OpenGraph/Twitter meta images, video/source links, JSON-LD structured data
@@ -197,8 +216,8 @@ app.py         Backwards-compatible Flask/Socket.IO entry point
 | `OPENROUTER_TEXT_MODEL` | Text generation model | `openrouter/free` |
 | `OPENROUTER_FALLBACK_TEXT_MODEL` | Fallback text model | - |
 | `OPENROUTER_VISION_MODEL` | Vision analysis model | `OPENROUTER_TEXT_MODEL` |
-| `OPENROUTER_IMAGE_MODEL` | Image generation model | - |
-| `OPENROUTER_VIDEO_MODEL` | Video generation model | - |
+| `OPENROUTER_IMAGE_MODEL` | Free text-to-image model (no reference inputs) | `inclusionai/ming-image-0.1-design` |
+| `OPENROUTER_VIDEO_MODEL` | Optional paid video model; blank uses local video rendering | - |
 | `OPENROUTER_VIDEO_RATIO` | Default aspect ratio | `16:9` |
 | `OPENROUTER_VIDEO_RESOLUTION` | Default resolution | `720p` |
 
@@ -388,7 +407,7 @@ pytest tests/ --cov=core --cov=app
 
 | Error | Solution |
 |-------|----------|
-| `"Set OPENROUTER_IMAGE_MODEL in .env"` | Set an image model ID if using OpenRouter credits; leave blank to route images to Agnes |
+| `"Set OPENROUTER_IMAGE_MODEL in .env"` | Set an image model ID if using OpenRouter; the default is the free Ming image model |
 | `"Set OPENROUTER_API_KEY in .env"` | Add OpenRouter API key and restart |
 | `"Set AGNES_API_KEY in .env"` | Add Agnes API key and restart |
 | Agnes video mode error | App uses `keyframes` (reference) or `ti2vid` (text-to-video) per Agnes spec |

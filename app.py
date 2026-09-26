@@ -11,6 +11,15 @@ Implements the reference-aware creative pipeline as real API endpoints:
 State lives in PROJECTS (in-memory) and is persisted atomically to
 data/projects.json. Generation runs in background threads with live
 Socket.IO progress events (polling fallback in the frontend).
+
+Extended API endpoints (v2):
+  POST   /api/autopilot/launch              — fire-and-forget autopilot pipeline
+  GET    /api/autopilot/status/<project_id> — poll autopilot job progress
+  GET    /api/campaign/<project_id>/bundle  — retrieve full campaign bundle JSON
+  GET    /api/campaign/<project_id>/quality — quality scores for all outputs
+  POST   /api/generate/batch                — parallel multi-variant generation
+  GET    /api/brand/<project_id>/dna        — retrieve / lazily extract brand DNA
+  POST   /api/brand/<project_id>/dna        — manually override brand DNA
 """
 
 import os
@@ -21,8 +30,9 @@ import threading
 import logging
 import tempfile
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 from flask import Flask, jsonify, request, render_template, send_from_directory, abort
 from flask_socketio import SocketIO, join_room, leave_room
@@ -35,11 +45,45 @@ from core import config, scraper, prompt_engine, model_router, generator, learni
 from core.store import load_persistent_collection, save_persistent_collection
 from core import database, storage, evaluator
 
+# ---------------------------------------------------------------------------
+# Optional heavy-core imports — fail gracefully so the rest of the app stays up
+# ---------------------------------------------------------------------------
+
+try:
+    from core.autopilot import run_autopilot  # type: ignore
+    _AUTOPILOT_AVAILABLE = True
+except ImportError:
+    run_autopilot = None  # type: ignore
+    _AUTOPILOT_AVAILABLE = False
+
+try:
+    from core.brand_manager import extract_brand_dna, brand_dna_to_prompt_block  # type: ignore
+    _BRAND_MANAGER_AVAILABLE = True
+except ImportError:
+    extract_brand_dna = None  # type: ignore
+    brand_dna_to_prompt_block = None  # type: ignore
+    _BRAND_MANAGER_AVAILABLE = False
+
+try:
+    from core.campaign_packager import build_bundle  # type: ignore
+    _PACKAGER_AVAILABLE = True
+except ImportError:
+    build_bundle = None  # type: ignore
+    _PACKAGER_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Flask / Socket.IO setup
+# ---------------------------------------------------------------------------
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY or uuid.uuid4().hex
@@ -58,17 +102,12 @@ socketio = SocketIO(
 )
 
 # ---------------------------------------------------------------------------
-# State
+# Constants
 # ---------------------------------------------------------------------------
 
-PROJECTS = {}
-PROJECTS_LOCK = threading.RLock()
-_STATE_LOCK = threading.RLock()
-_START_TIME = time.time()
+VALID_TYPES: tuple = ("copy", "image", "video")
 
-VALID_TYPES = ("copy", "image", "video")
-
-STAGE_INDEX = {
+STAGE_INDEX: Dict[str, int] = {
     "created": 0,
     "scraping": 1,
     "scraped": 1,
@@ -83,15 +122,39 @@ STAGE_INDEX = {
     "generation_failed": 4,
 }
 
+# Autopilot job status constants
+AUTOPILOT_STATUS_LAUNCHED: str = "launched"
+AUTOPILOT_STATUS_RUNNING: str = "running"
+AUTOPILOT_STATUS_COMPLETE: str = "complete"
+AUTOPILOT_STATUS_ERROR: str = "error"
+
+# Max variants allowed per batch request
+BATCH_MAX_COUNT: int = 4
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+PROJECTS: Dict[str, Dict[str, Any]] = {}
+PROJECTS_LOCK = threading.RLock()
+_STATE_LOCK = threading.RLock()
+_START_TIME: float = time.time()
+
+# Autopilot job registry: keyed by project_id
+# Each entry: {job_id, status, progress, step, error, bundle}
+AUTOPILOT_JOBS: Dict[str, Dict[str, Any]] = {}
+AUTOPILOT_JOBS_LOCK = threading.RLock()
+
 _rate_lock = threading.Lock()
-_rate_hits = {}
+_rate_hits: Dict[str, deque] = {}
 
 
 # ---------------------------------------------------------------------------
 # Persistence & helpers
 # ---------------------------------------------------------------------------
 
-def _load_projects():
+def _load_projects() -> None:
+    """Load persisted projects from disk/DB into the in-memory PROJECTS dict."""
     data = load_persistent_collection("projects", config.PROJECT_STORE, {"projects": []})
     for p in data.get("projects", []):
         if not isinstance(p, dict) or not p.get("id"):
@@ -117,19 +180,22 @@ def _load_projects():
         PROJECTS[p["id"]] = p
 
 
-def _persist():
+def _persist() -> None:
+    """Atomically persist all in-memory projects to the configured store."""
     with PROJECTS_LOCK:
         save_persistent_collection("projects", config.PROJECT_STORE, {"projects": list(PROJECTS.values())})
 
 
-def _log(p, message):
+def _log(p: Dict[str, Any], message: str) -> None:
+    """Append a timestamped history entry to a project, capped at 500 entries."""
     p.setdefault("history", []).append({"timestamp": time.time(), "message": message})
     if len(p["history"]) > 500:
         del p["history"][:-500]
 
 
-def _emit(pid, stage=None, message=None):
-    payload = {"project_id": pid, "timestamp": time.time()}
+def _emit(pid: str, stage: Optional[str] = None, message: Optional[str] = None) -> None:
+    """Emit a Socket.IO ``progress`` event to all clients in the project room."""
+    payload: Dict[str, Any] = {"project_id": pid, "timestamp": time.time()}
     if stage:
         payload["stage"] = stage
     if message:
@@ -140,7 +206,8 @@ def _emit(pid, stage=None, message=None):
         logger.debug("progress emit failed", exc_info=True)
 
 
-def _set_stage(p, stage, message=None):
+def _set_stage(p: Dict[str, Any], stage: str, message: Optional[str] = None) -> None:
+    """Atomically update a project's stage, log the message, persist, and broadcast."""
     with _STATE_LOCK:
         p["stage"] = stage
         if message:
@@ -149,11 +216,13 @@ def _set_stage(p, stage, message=None):
     _emit(p["id"], stage, message)
 
 
-def _get(pid):
+def _get(pid: str) -> Optional[Dict[str, Any]]:
+    """Return a project by ID or None."""
     return PROJECTS.get(pid)
 
 
-def _empty_scraped(title="Uploaded references"):
+def _empty_scraped(title: str = "Uploaded references") -> Dict[str, Any]:
+    """Return a blank scraped-data skeleton."""
     return {
         "url": "",
         "title": title,
@@ -166,9 +235,15 @@ def _empty_scraped(title="Uploaded references"):
     }
 
 
-def _new_project(url, brief, creative_types, creative_settings=None):
+def _new_project(
+    url: str,
+    brief: str,
+    creative_types: List[str],
+    creative_settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Create a new project dict, register it in PROJECTS, and return it."""
     pid = uuid.uuid4().hex[:10]
-    p = {
+    p: Dict[str, Any] = {
         "id": pid,
         "created_at": time.time(),
         "url": (url or "").strip(),
@@ -196,7 +271,7 @@ def _new_project(url, brief, creative_types, creative_settings=None):
 # Pipeline stage implementations
 # ---------------------------------------------------------------------------
 
-def ingest_project(p):
+def ingest_project(p: Dict[str, Any]) -> Dict[str, Any]:
     """Stage: reference ingestion — scrape URL (HTML/images/videos + frames)
     while preserving any previously uploaded assets."""
     prior = p.get("scraped")
@@ -235,7 +310,10 @@ def ingest_project(p):
     return p
 
 
-def synthesize_project_prompts(p, settings=None):
+def synthesize_project_prompts(
+    p: Dict[str, Any],
+    settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Stage: visual + metadata analysis and prompt engineering."""
     if not isinstance(p.get("scraped"), dict):
         ingest_project(p)
@@ -264,7 +342,12 @@ def synthesize_project_prompts(p, settings=None):
     return p
 
 
-def _model_candidates(p, ctype, forced_models=None):
+def _model_candidates(
+    p: Dict[str, Any],
+    ctype: str,
+    forced_models: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Return ordered model candidate list for a given creative type."""
     mid = (forced_models or {}).get(ctype)
     cands = model_router.model_candidates(ctype, forced_id=mid)
     if not cands and mid:
@@ -272,7 +355,12 @@ def _model_candidates(p, ctype, forced_models=None):
     return cands
 
 
-def generate_project_outputs(p, forced_models=None, settings=None, only_types=None):
+def generate_project_outputs(
+    p: Dict[str, Any],
+    forced_models: Optional[Dict[str, str]] = None,
+    settings: Optional[Dict[str, Any]] = None,
+    only_types: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Stage: best-model selection + generation (parallel across creative types)."""
     forced_models = forced_models or {}
     settings = settings or p.get("creative_settings") or {}
@@ -293,16 +381,16 @@ def generate_project_outputs(p, forced_models=None, settings=None, only_types=No
         _persist()
     _emit(p["id"], "generating", f"Rendering {', '.join(types)} with the selected engines…")
 
-    results = {}
-    errors = {}
+    results: Dict[str, Any] = {}
+    errors: Dict[str, str] = {}
 
-    def work(ctype):
+    def work(ctype: str):
         candidates = _model_candidates(p, ctype, forced_models)
         if not candidates:
             raise RuntimeError(f"No usable model configured for {ctype}.")
         refs = (p.get("scraped") or {}).get("assets") or []
-        warnings = []
-        last_err = None
+        warnings: List[str] = []
+        last_err: Optional[str] = None
         # Try hosted models in order; local is always last in the candidate list.
         for i, chosen in enumerate(candidates):
             is_last = i == len(candidates) - 1
@@ -386,7 +474,8 @@ def generate_project_outputs(p, forced_models=None, settings=None, only_types=No
     return p
 
 
-def _generate_worker(pid, forced_models, settings):
+def _generate_worker(pid: str, forced_models: Dict[str, str], settings: Dict[str, Any]) -> None:
+    """Background worker: generate outputs for an existing project."""
     p = _get(pid)
     if not p:
         return
@@ -403,7 +492,7 @@ def _generate_worker(pid, forced_models, settings):
         _emit(pid, "generation_failed", f"Generation failed: {exc}")
 
 
-def _pipeline_worker(pid, forced_models, settings):
+def _pipeline_worker(pid: str, forced_models: Dict[str, str], settings: Dict[str, Any]) -> None:
     """Full auto pipeline: ingest -> analyze/prompt -> verify -> generate."""
     p = _get(pid)
     if not p:
@@ -446,7 +535,7 @@ def _pipeline_worker(pid, forced_models, settings):
         _emit(pid, "generation_failed", f"Pipeline failed: {exc}")
 
 
-def _regen_worker(pid, rejected):
+def _regen_worker(pid: str, rejected: List[tuple]) -> None:
     """Refine rejected prompts from correction notes and regenerate those types."""
     p = _get(pid)
     if not p:
@@ -485,6 +574,84 @@ def _regen_worker(pid, rejected):
             _log(p, f"Regeneration failed: {exc}")
             _persist()
         _emit(pid, "generation_failed", f"Regeneration failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Autopilot background worker
+# ---------------------------------------------------------------------------
+
+def _run_autopilot_bg(project_id: str, job_id: str, params: Dict[str, Any]) -> None:
+    """Background thread target for the full autopilot pipeline.
+
+    Updates AUTOPILOT_JOBS[project_id] throughout, emits Socket.IO events,
+    and calls ``core.autopilot.run_autopilot`` if available.
+
+    Args:
+        project_id: The project identifier this job belongs to.
+        job_id:     Unique job identifier returned to the caller on launch.
+        params:     Dict containing creative_types, platforms, models, etc.
+    """
+    def _update_job(**kwargs: Any) -> None:
+        with AUTOPILOT_JOBS_LOCK:
+            AUTOPILOT_JOBS[project_id].update(kwargs)
+
+    def emit_fn(event: str, data: Any) -> None:
+        """Closure forwarding autopilot events to all SocketIO subscribers."""
+        try:
+            socketio.emit(event, data)
+        except Exception:
+            logger.debug("autopilot emit_fn failed for event=%s", event, exc_info=True)
+
+    logger.info("Autopilot background thread started: project=%s job=%s", project_id, job_id)
+    _update_job(status=AUTOPILOT_STATUS_RUNNING, step="initialising", progress=0)
+    emit_fn("autopilot_progress", {
+        "project_id": project_id,
+        "job_id": job_id,
+        "status": AUTOPILOT_STATUS_RUNNING,
+        "step": "initialising",
+        "progress": 0,
+    })
+
+    try:
+        if not _AUTOPILOT_AVAILABLE or run_autopilot is None:
+            raise RuntimeError(
+                "core.autopilot module is not installed. "
+                "Install it or implement core/autopilot.py."
+            )
+
+        bundle = run_autopilot(
+            project_id=project_id,
+            params=params,
+            emit_fn=emit_fn,
+        )
+
+        _update_job(
+            status=AUTOPILOT_STATUS_COMPLETE,
+            step="complete",
+            progress=100,
+            bundle=bundle,
+            error=None,
+        )
+        logger.info("Autopilot complete: project=%s job=%s", project_id, job_id)
+        emit_fn("autopilot_complete", {
+            "project_id": project_id,
+            "job_id": job_id,
+            "bundle": bundle,
+        })
+
+    except Exception as exc:
+        error_msg = str(exc)
+        logger.exception("Autopilot failed: project=%s job=%s", project_id, job_id)
+        _update_job(
+            status=AUTOPILOT_STATUS_ERROR,
+            step="error",
+            error=error_msg,
+        )
+        emit_fn("autopilot_error", {
+            "project_id": project_id,
+            "job_id": job_id,
+            "error": error_msg,
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +752,11 @@ def health():
         "object_storage": {
             "enabled": storage.enabled(),
             "bucket": config.SUPABASE_STORAGE_BUCKET if storage.enabled() else None,
+        },
+        "extensions": {
+            "autopilot": _AUTOPILOT_AVAILABLE,
+            "brand_manager": _BRAND_MANAGER_AVAILABLE,
+            "campaign_packager": _PACKAGER_AVAILABLE,
         },
     })
 
@@ -941,8 +1113,8 @@ def final_review_stage(pid):
     if not isinstance(decisions, dict) or not decisions:
         return jsonify({"error": "'decisions' must be a non-empty object."}), 400
 
-    approved_types = []
-    rejected = []
+    approved_types: List[str] = []
+    rejected: List[tuple] = []
     with _STATE_LOCK:
         for ctype, d in decisions.items():
             if ctype not in (p.get("outputs") or {}):
@@ -1004,6 +1176,428 @@ def final_review_stage(pid):
 
     socketio.start_background_task(_regen_worker, pid, rejected)
     return jsonify(p)
+
+
+# ---------------------------------------------------------------------------
+# API v2: Autopilot
+# ---------------------------------------------------------------------------
+
+@app.route("/api/autopilot/launch", methods=["POST"])
+def autopilot_launch():
+    """Launch the full autopilot pipeline for a project in a background thread.
+
+    Request body (JSON):
+        project_id     (str, required) — existing project to run autopilot on.
+        creative_types (list[str])     — override creative types (optional).
+        platforms      (list[str])     — target ad platforms (optional).
+        models         (dict)          — forced model overrides per type (optional).
+
+    Returns (202):
+        {status, project_id, job_id}
+    """
+    if not _AUTOPILOT_AVAILABLE:
+        return jsonify({
+            "error": "Autopilot module is not available. "
+                     "Implement core/autopilot.py with a run_autopilot() function."
+        }), 503
+
+    data = request.get_json(force=True, silent=True) or {}
+    project_id: Optional[str] = data.get("project_id")
+    if not project_id:
+        return jsonify({"error": "'project_id' is required."}), 400
+
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    # Check for an already-running job
+    with AUTOPILOT_JOBS_LOCK:
+        existing = AUTOPILOT_JOBS.get(project_id, {})
+        if existing.get("status") == AUTOPILOT_STATUS_RUNNING:
+            return jsonify({
+                "error": "An autopilot job is already running for this project.",
+                "job_id": existing.get("job_id"),
+            }), 409
+
+    job_id = uuid.uuid4().hex[:12]
+    params: Dict[str, Any] = {
+        "creative_types": data.get("creative_types") or p.get("creative_types", []),
+        "platforms": data.get("platforms") or [],
+        "models": data.get("models") or {},
+    }
+
+    with AUTOPILOT_JOBS_LOCK:
+        AUTOPILOT_JOBS[project_id] = {
+            "job_id": job_id,
+            "status": AUTOPILOT_STATUS_LAUNCHED,
+            "progress": 0,
+            "step": "queued",
+            "error": None,
+            "bundle": None,
+            "launched_at": time.time(),
+        }
+
+    logger.info("Launching autopilot: project=%s job=%s params=%s", project_id, job_id, params)
+    t = threading.Thread(
+        target=_run_autopilot_bg,
+        args=(project_id, job_id, params),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({
+        "status": AUTOPILOT_STATUS_LAUNCHED,
+        "project_id": project_id,
+        "job_id": job_id,
+    }), 202
+
+
+@app.route("/api/autopilot/status/<project_id>", methods=["GET"])
+def autopilot_status(project_id: str):
+    """Return the current autopilot job status for a project.
+
+    Returns (200):
+        {project_id, job_id, status, progress, step, error}
+    Returns (404) if no autopilot job has been launched for this project.
+    """
+    with AUTOPILOT_JOBS_LOCK:
+        job = AUTOPILOT_JOBS.get(project_id)
+
+    if not job:
+        return jsonify({"error": f"No autopilot job found for project '{project_id}'."}), 404
+
+    return jsonify({
+        "project_id": project_id,
+        "job_id": job.get("job_id"),
+        "status": job.get("status"),
+        "progress": job.get("progress", 0),
+        "step": job.get("step"),
+        "error": job.get("error"),
+        "launched_at": job.get("launched_at"),
+    })
+
+
+# ---------------------------------------------------------------------------
+# API v2: Campaign bundle & quality
+# ---------------------------------------------------------------------------
+
+@app.route("/api/campaign/<project_id>/bundle", methods=["GET"])
+def campaign_bundle(project_id: str):
+    """Return the full campaign bundle JSON for a completed autopilot run.
+
+    Returns (200) with bundle data if available.
+    Returns (404) if the bundle has not been generated yet.
+    Returns (503) if the campaign_packager module is unavailable.
+    """
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    # First check if the autopilot job produced a bundle
+    with AUTOPILOT_JOBS_LOCK:
+        job = AUTOPILOT_JOBS.get(project_id, {})
+        bundle = job.get("bundle")
+
+    if bundle:
+        return jsonify({"project_id": project_id, "bundle": bundle})
+
+    # Fallback: build the bundle on-demand from project outputs
+    if not p.get("outputs"):
+        return jsonify({"error": "Campaign bundle not yet generated. Run autopilot or generate outputs first."}), 404
+
+    if not _PACKAGER_AVAILABLE or build_bundle is None:
+        return jsonify({
+            "error": "Campaign packager module is unavailable. "
+                     "Implement core/campaign_packager.py with a build_bundle() function."
+        }), 503
+
+    try:
+        logger.info("Building on-demand campaign bundle for project=%s", project_id)
+        bundle = build_bundle(p)
+        return jsonify({"project_id": project_id, "bundle": bundle})
+    except Exception as exc:
+        logger.exception("Failed to build campaign bundle for project=%s", project_id)
+        return jsonify({"error": f"Bundle generation failed: {exc}"}), 500
+
+
+@app.route("/api/campaign/<project_id>/quality", methods=["GET"])
+def campaign_quality(project_id: str):
+    """Return quality scores for all outputs in a project.
+
+    Aggregates the ``evaluation`` dict stored on each output by
+    ``evaluator.evaluate_output`` at generation time.
+
+    Returns (200) with per-type quality scores.
+    Returns (404) if the project has no outputs yet.
+    """
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    outputs = p.get("outputs") or {}
+    if not outputs:
+        return jsonify({"error": "No outputs found. Generate content first."}), 404
+
+    scores: Dict[str, Any] = {}
+    for ctype, output in outputs.items():
+        evaluation = output.get("evaluation") or {}
+        scores[ctype] = {
+            "score": evaluation.get("score"),
+            "grade": evaluation.get("grade"),
+            "details": evaluation.get("details"),
+            "model_used": output.get("model_used"),
+            "filename": output.get("filename"),
+            "warning": output.get("warning"),
+        }
+
+    overall = None
+    numeric = [v["score"] for v in scores.values() if isinstance(v.get("score"), (int, float))]
+    if numeric:
+        overall = round(sum(numeric) / len(numeric), 3)
+
+    return jsonify({
+        "project_id": project_id,
+        "overall_score": overall,
+        "scores": scores,
+    })
+
+
+# ---------------------------------------------------------------------------
+# API v2: Batch generation
+# ---------------------------------------------------------------------------
+
+@app.route("/api/generate/batch", methods=["POST"])
+def generate_batch():
+    """Generate multiple variants of each creative type in parallel.
+
+    Request body (JSON):
+        project_id     (str, required)           — target project.
+        creative_types (list[str], optional)      — types to generate (defaults to project types).
+        models         (dict, optional)           — forced model overrides.
+        settings       (dict, optional)           — creative settings overrides.
+        count          (int, optional, 1–4)       — number of variants per type (default 1).
+
+    Streams per-variant progress via SocketIO ``batch_progress`` events.
+
+    Returns (200):
+        {project_id, outputs: [{ctype, variant, result}]}
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    project_id: Optional[str] = data.get("project_id")
+    if not project_id:
+        return jsonify({"error": "'project_id' is required."}), 400
+
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    prompts = p.get("reviewed_prompts") or {}
+    if not prompts:
+        return jsonify({"error": "No reviewed prompts available. Run the prompt stage first."}), 400
+
+    # Resolve parameters
+    raw_count = data.get("count", 1)
+    try:
+        count = max(1, min(BATCH_MAX_COUNT, int(raw_count)))
+    except (TypeError, ValueError):
+        return jsonify({"error": f"'count' must be an integer between 1 and {BATCH_MAX_COUNT}."}), 400
+
+    creative_types: List[str] = data.get("creative_types") or p.get("creative_types") or []
+    creative_types = [t for t in creative_types if t in prompts]
+    if not creative_types:
+        return jsonify({"error": "No valid creative types with prompts to generate."}), 400
+
+    forced_models: Dict[str, str] = data.get("models") or {}
+    settings: Dict[str, Any] = data.get("settings") or p.get("creative_settings") or {}
+
+    logger.info(
+        "Batch generation: project=%s types=%s count=%d",
+        project_id, creative_types, count,
+    )
+
+    all_outputs: List[Dict[str, Any]] = []
+    errors: List[Dict[str, str]] = []
+
+    def _generate_variant(ctype: str, variant_idx: int) -> Dict[str, Any]:
+        """Generate a single variant for one creative type."""
+        candidates = _model_candidates(p, ctype, forced_models)
+        if not candidates:
+            raise RuntimeError(f"No usable model configured for {ctype}.")
+        refs = (p.get("scraped") or {}).get("assets") or []
+        last_err: Optional[str] = None
+        for i, chosen in enumerate(candidates):
+            is_last = i == len(candidates) - 1
+            try:
+                result = generator.generate(
+                    ctype,
+                    prompts[ctype],
+                    chosen,
+                    refs,
+                    settings.get(ctype) or {},
+                    allow_local_fallback=is_last,
+                )
+                return {
+                    "ctype": ctype,
+                    "variant": variant_idx,
+                    "result": result,
+                    "model_used": result.get("model_used", chosen.get("id")),
+                }
+            except Exception as exc:
+                last_err = str(exc)
+                continue
+        raise RuntimeError(f"All engines failed for {ctype} variant {variant_idx}: {last_err}")
+
+    total_tasks = len(creative_types) * count
+    completed = 0
+
+    workers = max(1, min(6, total_tasks))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_map = {
+            pool.submit(_generate_variant, ctype, v): (ctype, v)
+            for ctype in creative_types
+            for v in range(1, count + 1)
+        }
+        for fut in as_completed(future_map):
+            ctype, variant_idx = future_map[fut]
+            try:
+                output = fut.result()
+                all_outputs.append(output)
+                logger.info(
+                    "Batch variant done: project=%s ctype=%s variant=%d model=%s",
+                    project_id, ctype, variant_idx, output.get("model_used"),
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Batch variant failed: project=%s ctype=%s variant=%d",
+                    project_id, ctype, variant_idx,
+                )
+                errors.append({"ctype": ctype, "variant": variant_idx, "error": str(exc)})
+
+            completed += 1
+            progress_pct = round((completed / total_tasks) * 100)
+            try:
+                socketio.emit("batch_progress", {
+                    "project_id": project_id,
+                    "completed": completed,
+                    "total": total_tasks,
+                    "progress": progress_pct,
+                    "ctype": ctype,
+                    "variant": variant_idx,
+                })
+            except Exception:
+                logger.debug("batch_progress emit failed", exc_info=True)
+
+    response: Dict[str, Any] = {
+        "project_id": project_id,
+        "outputs": all_outputs,
+    }
+    if errors:
+        response["errors"] = errors
+        response["partial"] = True
+
+    return jsonify(response)
+
+
+# ---------------------------------------------------------------------------
+# API v2: Brand DNA
+# ---------------------------------------------------------------------------
+
+@app.route("/api/brand/<project_id>/dna", methods=["GET"])
+def get_brand_dna(project_id: str):
+    """Return the extracted brand DNA for a project.
+
+    If brand DNA has already been extracted and cached on the project, return it.
+    Otherwise, lazily extract it from the project's scraped data and cache it.
+
+    Returns (200) with brand DNA dict.
+    Returns (400) if the project has no scraped data to extract from.
+    Returns (404) if the project does not exist.
+    Returns (503) if the brand_manager module is unavailable.
+    """
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    # Return cached brand DNA if available
+    cached_dna = p.get("brand_dna")
+    if cached_dna:
+        return jsonify({
+            "project_id": project_id,
+            "brand_dna": cached_dna,
+            "source": "cache",
+        })
+
+    if not _BRAND_MANAGER_AVAILABLE or extract_brand_dna is None:
+        return jsonify({
+            "error": "Brand manager module is unavailable. "
+                     "Implement core/brand_manager.py with extract_brand_dna()."
+        }), 503
+
+    scraped = p.get("scraped")
+    if not isinstance(scraped, dict) or not scraped:
+        scraped = {
+            "title": (p.get("brief") or "")[:50],
+            "text": p.get("brief", ""),
+            "assets": [],
+        }
+
+    try:
+        logger.info("Extracting brand DNA for project=%s", project_id)
+        dna = extract_brand_dna(scraped, p.get("brief", ""))
+        with _STATE_LOCK:
+            p["brand_dna"] = dna
+            _log(p, "Brand DNA extracted and cached.")
+            _persist()
+        return jsonify({
+            "project_id": project_id,
+            "brand_dna": dna,
+            "source": "extracted",
+        })
+    except Exception as exc:
+        logger.exception("Brand DNA extraction failed for project=%s", project_id)
+        return jsonify({"error": f"Brand DNA extraction failed: {exc}"}), 500
+
+
+@app.route("/api/brand/<project_id>/dna", methods=["POST"])
+def set_brand_dna(project_id: str):
+    """Manually override or update the brand DNA for a project.
+
+    Request body (JSON):
+        brand_dna (dict, required) — the new brand DNA object.
+
+    Returns (200) with the updated brand DNA.
+    Returns (400) for validation errors.
+    Returns (404) if the project does not exist.
+    """
+    p = _get(project_id)
+    if not p:
+        return jsonify({"error": f"Project '{project_id}' not found."}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    brand_dna = data.get("brand_dna")
+    if not isinstance(brand_dna, dict) or not brand_dna:
+        return jsonify({"error": "'brand_dna' must be a non-empty object."}), 400
+
+    with _STATE_LOCK:
+        p["brand_dna"] = brand_dna
+        _log(p, "Brand DNA manually overridden via API.")
+        _persist()
+
+    logger.info("Brand DNA updated for project=%s (%d keys)", project_id, len(brand_dna))
+
+    # Optionally derive a prompt block for logging/debugging
+    prompt_block: Optional[str] = None
+    if _BRAND_MANAGER_AVAILABLE and brand_dna_to_prompt_block is not None:
+        try:
+            prompt_block = brand_dna_to_prompt_block(brand_dna)
+        except Exception:
+            logger.debug("brand_dna_to_prompt_block failed", exc_info=True)
+
+    return jsonify({
+        "project_id": project_id,
+        "brand_dna": brand_dna,
+        "prompt_block": prompt_block,
+    })
 
 
 # ---------------------------------------------------------------------------
