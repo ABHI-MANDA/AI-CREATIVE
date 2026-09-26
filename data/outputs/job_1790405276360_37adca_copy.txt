@@ -1,0 +1,44 @@
+# 🚀 Production Campaign Suite: test campaign
+
+## 🎯 Campaign Positioning
+- Premium quality, international appeal, and authoritative positioning.
+- Modern, sophisticated, confident, conversion-focused tone.
+
+## 📢 Headlines & Taglines
+- **Primary:** "test campaign — Built for Distinction."
+- **Secondary:** "Experience extraordinary quality, tailored to your expectations."
+
+## 📱 Instagram & Facebook
+**Caption:** ✨ Discover the new standard in excellence. test campaign delivers a premium campaign experience designed for attention and action.
+**CTA:** Learn More
+**Hashtags:** #testcampaign #Campaign #Luxury #Innovation
+
+## 💼 LinkedIn
+**Headline:** Elevating standards through design, performance, and craftsmanship.
+**Body:** test campaign brings together design, performance and a polished customer experience.
+
+## 🔍 Google Ads
+- Headline 1: test campaign
+- Headline 2: Official Campaign Showcase
+- Headline 3: Premium Quality & Style
+- Description 1: Discover test campaign. Modern design, premium craftsmanship, and exceptional value.
+- Description 2: Explore the campaign and take the next step today.
+
+---
+### Full Prompt Directives
+Fallback campaign engine:
+
+test campaign
+
+Platform: INSTAGRAM FEED
+Target dimensions: 1080x1080px
+Aspect ratio: 1:1
+Copy limit: 2200 characters
+BRAND DNA:
+- Palette: neutral tones
+- Lighting: unknown
+- Composition: unknown
+- Tone: neutral
+- Typography: sans-serif modern
+- DO: show product in a lifestyle or real-world context; use negative space for visual breathing room; keep typography legible at small sizes; maintain consistent brand color palette
+- DON'T: use busy or cluttered backgrounds; mix more than two font families; use low-resolution or pixelated assets; place text over busy image areas without contrast
